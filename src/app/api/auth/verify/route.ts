@@ -12,6 +12,7 @@ import {
   timingSafeEqualHex,
 } from "@/lib/otp";
 import { createUser, getUserByEmail, getUserProfile } from "@/lib/user";
+import { authCookie, createAuthToken } from "@/lib/auth";
 
 type RequestBody = {
   email?: string;
@@ -124,14 +125,23 @@ export async function POST(req: Request) {
       }
 
       console.log("[otp/verify] login_success", { userId: userEmail.userId });
-      return json(200, {
-        ok: true,
-        user: {
-          userId: userEmail.userId,
-          email: userEmail.email,
-          name: userProfile.name,
+      const res = NextResponse.json(
+        {
+          ok: true,
+          user: {
+            userId: userEmail.userId,
+            email: userEmail.email,
+            name: userProfile.name,
+          },
         },
+        { status: 200 }
+      );
+      const token = await createAuthToken({
+        userId: userEmail.userId,
+        email: userEmail.email,
       });
+      res.cookies.set(authCookie.name, token, authCookie.options());
+      return res;
     }
 
     const userName =
@@ -146,14 +156,20 @@ export async function POST(req: Request) {
         userName
       );
       console.log("[otp/verify] user_created", { userId });
-      return json(200, {
-        ok: true,
-        user: {
-          userId,
-          email,
-          name: userProfile.name,
+      const res = NextResponse.json(
+        {
+          ok: true,
+          user: {
+            userId,
+            email,
+            name: userProfile.name,
+          },
         },
-      });
+        { status: 200 }
+      );
+      const token = await createAuthToken({ userId, email });
+      res.cookies.set(authCookie.name, token, authCookie.options());
+      return res;
     } catch (err: unknown) {
       let errName: string | undefined;
       if (typeof err === "object" && err !== null) {
@@ -179,14 +195,23 @@ export async function POST(req: Request) {
             existingUserEmail.userId
           );
           if (existingUserProfile) {
-            return json(200, {
-              ok: true,
-              user: {
-                userId: existingUserEmail.userId,
-                email: existingUserEmail.email,
-                name: existingUserProfile.name,
+            const res = NextResponse.json(
+              {
+                ok: true,
+                user: {
+                  userId: existingUserEmail.userId,
+                  email: existingUserEmail.email,
+                  name: existingUserProfile.name,
+                },
               },
+              { status: 200 }
+            );
+            const token = await createAuthToken({
+              userId: existingUserEmail.userId,
+              email: existingUserEmail.email,
             });
+            res.cookies.set(authCookie.name, token, authCookie.options());
+            return res;
           }
         }
         return json(409, { ok: false, error: "User already exists" });

@@ -1,13 +1,31 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { swaggerSpec } from "@/lib/swagger";
 
 /**
  * GET /api/docs - Get OpenAPI specification
  * @returns OpenAPI JSON specification
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    return NextResponse.json(swaggerSpec, {
+    const baseUrl =
+      process.env.NEXT_PUBLIC_API_URL ||
+      (process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : request.headers.get("host")
+        ? `https://${request.headers.get("host")}`
+        : "http://localhost:3000");
+
+    const spec = {
+      ...swaggerSpec,
+      servers: [
+        {
+          url: baseUrl,
+          description: "API Server",
+        },
+      ],
+    };
+
+    return NextResponse.json(spec, {
       headers: {
         "Content-Type": "application/json",
         "Access-Control-Allow-Origin": "*",

@@ -7,7 +7,11 @@ export const swaggerSpec = {
   },
   servers: [
     {
-      url: process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000",
+      url:
+        process.env.NEXT_PUBLIC_API_URL ||
+        (process.env.VERCEL_URL
+          ? `https://${process.env.VERCEL_URL}`
+          : "http://localhost:3000"),
       description: "API Server",
     },
   ],
@@ -104,7 +108,7 @@ export const swaggerSpec = {
       post: {
         summary: "Verify OTP and Authenticate",
         description:
-          "Verify the OTP code and authenticate the user. If the user exists, they will be logged in. If the user doesn't exist, a new account will be created (name is required for registration).",
+          "Verify the OTP code and authenticate the user. If the user exists, they will be logged in. If the user doesn't exist, a new account will be created. On success, an httpOnly cookie is set.",
         operationId: "verifyOtp",
         tags: ["Authentication"],
         requestBody: {
@@ -132,7 +136,7 @@ export const swaggerSpec = {
                     minLength: 1,
                     maxLength: 256,
                     description:
-                      "User's name (required only for new user registration)",
+                      "User's name (optional; if omitted for new users, a name will be derived)",
                     example: "John Doe",
                   },
                 },
@@ -199,13 +203,6 @@ export const swaggerSpec = {
                       error: "Invalid or expired code",
                     },
                   },
-                  nameRequired: {
-                    summary: "Name required for registration",
-                    value: {
-                      ok: false,
-                      error: "Name is required to create a new account",
-                    },
-                  },
                 },
               },
             },
@@ -241,8 +238,74 @@ export const swaggerSpec = {
         },
       },
     },
+    "/api/auth/me": {
+      get: {
+        summary: "Get current user",
+        description:
+          "Returns the current authenticated user using the httpOnly auth cookie.",
+        operationId: "getCurrentUser",
+        tags: ["Authentication"],
+        security: [{ cookieAuth: [] }],
+        responses: {
+          "200": {
+            description: "Current user",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    ok: { type: "boolean", example: true },
+                    user: { $ref: "#/components/schemas/User" },
+                  },
+                  required: ["ok", "user"],
+                },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                example: { ok: false, error: "Unauthorized" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/auth/logout": {
+      post: {
+        summary: "Logout",
+        description: "Clears the auth cookie.",
+        operationId: "logout",
+        tags: ["Authentication"],
+        security: [{ cookieAuth: [] }],
+        responses: {
+          "200": {
+            description: "Logged out",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: { ok: { type: "boolean", example: true } },
+                  required: ["ok"],
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   },
   components: {
+    securitySchemes: {
+      cookieAuth: {
+        type: "apiKey",
+        in: "cookie",
+        name: "auth-token",
+      },
+    },
     schemas: {
       User: {
         type: "object",
