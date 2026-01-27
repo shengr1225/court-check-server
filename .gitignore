@@ -33,6 +33,10 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# local AWS credentials/config (do not commit)
+.aws/credentials
+.aws/config
+
 # vercel
 .vercel
 

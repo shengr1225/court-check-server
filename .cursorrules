@@ -1,0 +1,24 @@
+# Project Cursor Rules (court-check-server)
+
+#
+
+# Goal: keep code minimal, explicit, and predictable.
+
+## Code standards (strict)
+
+- Make the **smallest possible change** to satisfy the request. Avoid refactors unless required.
+- **Do not add fallbacks/defaults** (no silent defaults, no “just in case” branches). Prefer failing fast.
+- **Do not add unnecessary try/catch**. Only catch when you can handle/recover meaningfully; otherwise let errors surface.
+- Do not add speculative validation, logging, retries, or “future-proofing” unless asked.
+- Keep functions small and single-purpose. Remove dead/unused code immediately.
+
+## TypeScript / Node conventions
+
+- Prefer explicit types at module boundaries; avoid `any` unless unavoidable.
+- Prefer `const`; avoid mutable state unless necessary.
+- Prefer `import`/ESM; keep module style consistent within a file.
+
+## Operational conventions
+
+- Prefer reading existing code before editing to match established patterns.
+- Do not ask for confirmation before applying code changes.

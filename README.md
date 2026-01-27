@@ -2,6 +2,10 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+## Email OTP (AWS SES + DynamoDB)
+
+See `docs/email-otp-aws.md` for configuration and the starter API endpoints.
+
 First, run the development server:
 
 ```bash
