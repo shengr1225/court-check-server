@@ -273,6 +273,68 @@ export const swaggerSpec = {
           },
         },
       },
+      patch: {
+        summary: "Update current user's name",
+        description:
+          "Updates the current user's profile name using the httpOnly auth cookie.",
+        operationId: "updateCurrentUserName",
+        tags: ["Authentication"],
+        security: [{ cookieAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["name"],
+                properties: {
+                  name: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 256,
+                    example: "New Name",
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Updated user",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    ok: { type: "boolean", example: true },
+                    user: { $ref: "#/components/schemas/User" },
+                  },
+                  required: ["ok", "user"],
+                },
+              },
+            },
+          },
+          "400": {
+            description: "Invalid request",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                example: { ok: false, error: "Invalid name" },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                example: { ok: false, error: "Unauthorized" },
+              },
+            },
+          },
+        },
+      },
     },
     "/api/auth/logout": {
       post: {

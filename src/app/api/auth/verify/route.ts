@@ -1,18 +1,9 @@
-import {
-  DeleteCommand,
-  GetCommand,
-  UpdateCommand,
-} from "@aws-sdk/lib-dynamodb";
 import { NextResponse } from "next/server";
-import { ddbDoc } from "@/lib/aws";
 import { mustGetEnv } from "@/lib/env";
-import {
-  hmacOtpHash,
-  isProbablyValidEmail,
-  timingSafeEqualHex,
-} from "@/lib/otp";
-import { createUser, getUserByEmail, getUserProfile } from "@/lib/user";
+import { isProbablyValidEmail } from "@/lib/otp";
 import { authCookie, createAuthToken } from "@/lib/auth";
+import { UserService } from "@/services/UserService";
+import { OtpService } from "@/services/OtpService";
 
 type RequestBody = {
   email?: string;
@@ -56,195 +47,129 @@ export async function POST(req: Request) {
       error: "Bad server config: OTP_MAX_ATTEMPTS",
     });
   }
+  const otpRes = await OtpService.verifyAndConsumeOtp({
+    tableName,
+    email,
+    otpSecret,
+    code,
+    maxAttempts,
+  });
 
-  const pk = `EMAIL#${email}`;
-  const sk = "OTP";
+  if (!otpRes.ok) {
+    return json(otpRes.status, { ok: false, error: otpRes.error });
+  }
 
-  const nowSec = Math.floor(Date.now() / 1000);
+  const userEmail = await UserService.getUserEmailByEmail({ tableName, email });
 
-  type OtpItem = {
-    otpHash?: string;
-    expiresAt?: number;
-    attemptCount?: number;
-  };
+  if (userEmail) {
+    const userProfile = await UserService.getUserProfileByUserId({
+      tableName,
+      userId: userEmail.userId,
+    });
+    if (!userProfile) {
+      console.log("[otp/verify] profile_not_found", {
+        userId: userEmail.userId,
+      });
+      return json(500, { ok: false, error: "User profile not found" });
+    }
 
-  let item: OtpItem | undefined;
+    console.log("[otp/verify] login_success", { userId: userEmail.userId });
+    const res = NextResponse.json(
+      {
+        ok: true,
+        user: {
+          userId: userEmail.userId,
+          email: userEmail.email,
+          name: userProfile.name,
+        },
+      },
+      { status: 200 }
+    );
+    const token = await createAuthToken({
+      userId: userEmail.userId,
+      email: userEmail.email,
+    });
+    res.cookies.set(authCookie.name, token, authCookie.options());
+    return res;
+  }
+
+  const userName =
+    name && name.length > 0 && name.length <= 256 ? name : email.split("@")[0];
 
   try {
-    const res = await ddbDoc().send(
-      new GetCommand({
-        TableName: tableName,
-        Key: { pk, sk },
-        ConsistentRead: true,
-      })
-    );
-    item = res.Item as OtpItem | undefined;
-  } catch (err) {
-    console.error("OTP verify failed (ddb get):", err);
-    return json(500, { ok: false, error: "Failed to verify code" });
-  }
-
-  if (!item?.otpHash || !item?.expiresAt) {
-    return json(400, { ok: false, error: "Invalid or expired code" });
-  }
-
-  if (item.expiresAt <= nowSec) {
-    // Best-effort cleanup
-    try {
-      await ddbDoc().send(
-        new DeleteCommand({ TableName: tableName, Key: { pk, sk } })
-      );
-    } catch {
-      // ignore
-    }
-    return json(400, { ok: false, error: "Invalid or expired code" });
-  }
-
-  const expected = item.otpHash;
-  const actual = hmacOtpHash({ secret: otpSecret, email, otp: code });
-  const ok = timingSafeEqualHex(expected, actual);
-
-  if (ok) {
-    try {
-      await ddbDoc().send(
-        new DeleteCommand({ TableName: tableName, Key: { pk, sk } })
-      );
-    } catch (err) {
-      console.error("[otp/verify] cleanup_failed:", err);
-    }
-
-    const userEmail = await getUserByEmail(tableName, email);
-
-    if (userEmail) {
-      const userProfile = await getUserProfile(tableName, userEmail.userId);
-      if (!userProfile) {
-        console.log("[otp/verify] profile_not_found", {
-          userId: userEmail.userId,
-        });
-        return json(500, { ok: false, error: "User profile not found" });
-      }
-
-      console.log("[otp/verify] login_success", { userId: userEmail.userId });
-      const res = NextResponse.json(
-        {
-          ok: true,
-          user: {
-            userId: userEmail.userId,
-            email: userEmail.email,
-            name: userProfile.name,
-          },
+    const userId = UserService.generateUserId();
+    const { userProfile } = await UserService.createUser({
+      tableName,
+      userId,
+      email,
+      name: userName,
+    });
+    console.log("[otp/verify] user_created", { userId });
+    const res = NextResponse.json(
+      {
+        ok: true,
+        user: {
+          userId,
+          email,
+          name: userProfile.name,
         },
-        { status: 200 }
-      );
-      const token = await createAuthToken({
-        userId: userEmail.userId,
-        email: userEmail.email,
-      });
-      res.cookies.set(authCookie.name, token, authCookie.options());
-      return res;
+      },
+      { status: 200 }
+    );
+    const token = await createAuthToken({ userId, email });
+    res.cookies.set(authCookie.name, token, authCookie.options());
+    return res;
+  } catch (err: unknown) {
+    let errName: string | undefined;
+    if (typeof err === "object" && err !== null) {
+      if (
+        "name" in err &&
+        typeof (err as { name?: unknown }).name === "string"
+      ) {
+        errName = (err as { name: string }).name;
+      } else if (
+        "__type" in err &&
+        typeof (err as { __type?: unknown }).__type === "string"
+      ) {
+        errName = (err as { __type: string }).__type;
+      }
     }
 
-    const userName =
-      name && name.length > 0 && name.length <= 256
-        ? name
-        : email.split("@")[0];
-
-    try {
-      const { userId, userProfile } = await createUser(
+    if (errName === "TransactionCanceledException") {
+      console.log("[otp/verify] user_created_concurrently", { email });
+      const existingUserEmail = await UserService.getUserEmailByEmail({
         tableName,
         email,
-        userName
-      );
-      console.log("[otp/verify] user_created", { userId });
-      const res = NextResponse.json(
-        {
-          ok: true,
-          user: {
-            userId,
-            email,
-            name: userProfile.name,
-          },
-        },
-        { status: 200 }
-      );
-      const token = await createAuthToken({ userId, email });
-      res.cookies.set(authCookie.name, token, authCookie.options());
-      return res;
-    } catch (err: unknown) {
-      let errName: string | undefined;
-      if (typeof err === "object" && err !== null) {
-        if (
-          "name" in err &&
-          typeof (err as { name?: unknown }).name === "string"
-        ) {
-          errName = (err as { name: string }).name;
-        } else if (
-          "__type" in err &&
-          typeof (err as { __type?: unknown }).__type === "string"
-        ) {
-          errName = (err as { __type: string }).__type;
-        }
-      }
-
-      if (errName === "TransactionCanceledException") {
-        console.log("[otp/verify] user_created_concurrently", { email });
-        const existingUserEmail = await getUserByEmail(tableName, email);
-        if (existingUserEmail) {
-          const existingUserProfile = await getUserProfile(
-            tableName,
-            existingUserEmail.userId
-          );
-          if (existingUserProfile) {
-            const res = NextResponse.json(
-              {
-                ok: true,
-                user: {
-                  userId: existingUserEmail.userId,
-                  email: existingUserEmail.email,
-                  name: existingUserProfile.name,
-                },
+      });
+      if (existingUserEmail) {
+        const existingUserProfile = await UserService.getUserProfileByUserId({
+          tableName,
+          userId: existingUserEmail.userId,
+        });
+        if (existingUserProfile) {
+          const res = NextResponse.json(
+            {
+              ok: true,
+              user: {
+                userId: existingUserEmail.userId,
+                email: existingUserEmail.email,
+                name: existingUserProfile.name,
               },
-              { status: 200 }
-            );
-            const token = await createAuthToken({
-              userId: existingUserEmail.userId,
-              email: existingUserEmail.email,
-            });
-            res.cookies.set(authCookie.name, token, authCookie.options());
-            return res;
-          }
+            },
+            { status: 200 }
+          );
+          const token = await createAuthToken({
+            userId: existingUserEmail.userId,
+            email: existingUserEmail.email,
+          });
+          res.cookies.set(authCookie.name, token, authCookie.options());
+          return res;
         }
-        return json(409, { ok: false, error: "User already exists" });
       }
-
-      console.error("[otp/verify] create_user_failed:", err);
-      return json(500, { ok: false, error: "Failed to create user" });
+      return json(409, { ok: false, error: "User already exists" });
     }
-  }
 
-  // Wrong code: increment attempts, and optionally lock out/delete if exceeded.
-  try {
-    const res = await ddbDoc().send(
-      new UpdateCommand({
-        TableName: tableName,
-        Key: { pk, sk },
-        UpdateExpression: "ADD attemptCount :one",
-        ExpressionAttributeValues: { ":one": 1 },
-        ReturnValues: "ALL_NEW",
-      })
-    );
-    const newAttemptCount = Number(
-      (res.Attributes as OtpItem | undefined)?.attemptCount || 0
-    );
-    if (newAttemptCount >= maxAttempts) {
-      await ddbDoc().send(
-        new DeleteCommand({ TableName: tableName, Key: { pk, sk } })
-      );
-    }
-  } catch (err) {
-    console.error("[otp/verify] update_attempts_failed:", err);
+    console.error("[otp/verify] create_user_failed:", err);
+    return json(500, { ok: false, error: "Failed to create user" });
   }
-
-  console.log("[otp/verify] invalid_code");
-  return json(400, { ok: false, error: "Invalid or expired code" });
 }
