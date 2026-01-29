@@ -2748,6 +2748,7 @@ __metadata:
     next: "npm:16.1.4"
     react: "npm:19.2.3"
     react-dom: "npm:19.2.3"
+    stripe: "npm:^20.3.0"
     tailwindcss: "npm:^4"
     typescript: "npm:^5"
     zod: "npm:^3.25.0"
@@ -5205,6 +5206,18 @@ __metadata:
   version: 3.1.1
   resolution: "strip-json-comments@npm:3.1.1"
   checksum: 10c0/9681a6257b925a7fa0f285851c0e613cc934a50661fa7bb41ca9cbbff89686bb4a0ee366e6ecedc4daafd01e83eee0720111ab294366fe7c185e935475ebcecd
+  languageName: node
+  linkType: hard
+
+"stripe@npm:^20.3.0":
+  version: 20.3.0
+  resolution: "stripe@npm:20.3.0"
+  peerDependencies:
+    "@types/node": ">=16"
+  peerDependenciesMeta:
+    "@types/node":
+      optional: true
+  checksum: 10c0/f895b9674ed5e192868b569873392aa8e6a3f03cf7e3a4de2a126da6b28e9dd4432ca7d8fe9782dc2b9cccbcfc8ccefc998565a1ccf8ed263873aa018d864657
   languageName: node
   linkType: hard
 

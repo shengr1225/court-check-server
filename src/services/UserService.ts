@@ -105,4 +105,23 @@ export const UserService = {
 
     return attrs;
   },
+
+  async setStripeCustomerId(params: {
+    tableName: string;
+    userId: string;
+    stripeCustomerId: string;
+  }): Promise<void> {
+    const pk = `USER#${params.userId}`;
+    const sk = "PROFILE";
+
+    await ddbUpdate({
+      TableName: params.tableName,
+      Key: { pk, sk },
+      UpdateExpression: "SET stripeCustomerId = :stripeCustomerId",
+      ExpressionAttributeValues: {
+        ":stripeCustomerId": params.stripeCustomerId,
+      },
+      ConditionExpression: "attribute_exists(pk)",
+    });
+  },
 };

@@ -43,3 +43,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+applepay/apple_pay.cer
+applepay/stripe.certSigningRequest
+cookies.txt
+yarn.lock
+yarn.lock

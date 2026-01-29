@@ -1,6 +1,8 @@
 import {
   DeleteCommand,
   GetCommand,
+  PutCommand,
+  QueryCommand,
   TransactWriteCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
@@ -36,4 +38,29 @@ export async function ddbTransactWrite(
   params: ConstructorParameters<typeof TransactWriteCommand>[0]
 ): Promise<void> {
   await ddbDoc().send(new TransactWriteCommand(params));
+}
+
+export async function ddbPut(
+  params: ConstructorParameters<typeof PutCommand>[0]
+): Promise<void> {
+  await ddbDoc().send(new PutCommand(params));
+}
+
+export async function ddbQuery<TItem extends Record<string, unknown>>(params: {
+  tableName: string;
+  keyConditionExpression: string;
+  expressionAttributeNames?: Record<string, string>;
+  expressionAttributeValues?: Record<string, unknown>;
+  indexName?: string;
+}): Promise<TItem[]> {
+  const res = await ddbDoc().send(
+    new QueryCommand({
+      TableName: params.tableName,
+      IndexName: params.indexName,
+      KeyConditionExpression: params.keyConditionExpression,
+      ExpressionAttributeNames: params.expressionAttributeNames,
+      ExpressionAttributeValues: params.expressionAttributeValues,
+    })
+  );
+  return (res.Items as TItem[] | undefined) ?? [];
 }

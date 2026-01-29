@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "otp:create-table": "node scripts/create-otp-table.mjs"
+    "otp:create-table": "node scripts/create-otp-table.mjs",
+    "courts:seed": "node scripts/seed-courts.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.975.0",
@@ -18,6 +19,7 @@
     "next": "16.1.4",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "stripe": "^20.3.0",
     "zod": "^3.25.0"
   },
   "devDependencies": {

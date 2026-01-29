@@ -16,6 +16,104 @@ export const swaggerSpec = {
     },
   ],
   paths: {
+    "/api/courts": {
+      get: {
+        summary: "List courts",
+        description:
+          "Returns a list of pickleball courts with status, last updated timestamp, and a photo URL.",
+        operationId: "listCourts",
+        tags: ["Courts"],
+        responses: {
+          "200": {
+            description: "Courts list",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    ok: { type: "boolean", example: true },
+                    courts: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/Court" },
+                    },
+                  },
+                  required: ["ok", "courts"],
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/courts/{id}/checkin": {
+      post: {
+        summary: "Create a check-in",
+        description:
+          "Creates a check-in for a court. The check-in is associated with the authenticated user.",
+        operationId: "createCourtCheckin",
+        tags: ["Courts"],
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "Court ID",
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["status"],
+                properties: {
+                  status: { $ref: "#/components/schemas/CourtStatus" },
+                  photoUrl: { type: "string", format: "uri" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Created check-in",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    ok: { type: "boolean", example: true },
+                    checkin: { $ref: "#/components/schemas/Checkin" },
+                  },
+                  required: ["ok", "checkin"],
+                },
+              },
+            },
+          },
+          "400": {
+            description: "Invalid request",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                example: { ok: false, error: "Invalid request" },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                example: { ok: false, error: "Unauthorized" },
+              },
+            },
+          },
+        },
+      },
+    },
     "/api/auth/request": {
       post: {
         summary: "Request OTP",
@@ -369,6 +467,54 @@ export const swaggerSpec = {
       },
     },
     schemas: {
+      Court: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "Court identifier" },
+          name: { type: "string", description: "Court name" },
+          addressLine: { type: "string", description: "Court address line" },
+          courtCount: {
+            type: "integer",
+            description: "Number of courts at this location",
+            example: 8,
+          },
+          status: { $ref: "#/components/schemas/CourtStatus" },
+          lastUpdatedAt: {
+            type: "string",
+            format: "date-time",
+            description: "ISO timestamp of last status update",
+          },
+          photoUrl: {
+            type: "string",
+            format: "uri",
+            description: "URL to a court photo",
+          },
+        },
+        required: [
+          "id",
+          "name",
+          "addressLine",
+          "status",
+          "lastUpdatedAt",
+          "photoUrl",
+        ],
+      },
+      CourtStatus: {
+        type: "string",
+        enum: ["EMPTY", "LOW", "MEDIUM", "CROWDED"],
+      },
+      Checkin: {
+        type: "object",
+        properties: {
+          checkinId: { type: "string", description: "Check-in identifier" },
+          courtId: { type: "string", description: "Court ID" },
+          userId: { type: "string", description: "User ID" },
+          status: { $ref: "#/components/schemas/CourtStatus" },
+          createdAt: { type: "string", format: "date-time" },
+          photoUrl: { type: "string", format: "uri" },
+        },
+        required: ["checkinId", "courtId", "userId", "status", "createdAt"],
+      },
       User: {
         type: "object",
         properties: {
