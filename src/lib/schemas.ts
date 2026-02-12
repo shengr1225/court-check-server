@@ -29,6 +29,7 @@ const CheckinFieldsSchema = z.object({
   checkinId: z.string(),
   courtId: z.string(),
   userId: z.string(),
+  userName: z.string().optional(),
   status: CourtStatusSchema,
   createdAt: z.string().datetime(),
   photoUrl: z.string().url().optional(),

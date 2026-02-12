@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "otp:create-table": "node scripts/create-otp-table.mjs",
-    "courts:seed": "node scripts/seed-courts.mjs"
+    "courts:seed": "node scripts/seed-courts.mjs",
+    "test:courts": "node scripts/test-courts.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.975.0",

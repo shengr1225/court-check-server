@@ -1,8 +1,39 @@
 import crypto from "node:crypto";
-import { Checkin, CheckinEntity, CourtStatus } from "@/lib/schemas";
-import { ddbTransactWrite } from "@/services/dynamodb";
+import {
+  Checkin,
+  CheckinEntity,
+  CheckinEntitySchema,
+  CourtStatus,
+} from "@/lib/schemas";
+import { ddbQuery, ddbTransactWrite } from "@/services/dynamodb";
 
 export const CheckinService = {
+  async listCheckinsByCourtId(params: {
+    tableName: string;
+    courtId: string;
+  }): Promise<Checkin[]> {
+    const items = await ddbQuery<Record<string, unknown>>({
+      tableName: params.tableName,
+      keyConditionExpression: "#pk = :pk AND begins_with(#sk, :skPrefix)",
+      expressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+      expressionAttributeValues: {
+        ":pk": `COURT#${params.courtId}`,
+        ":skPrefix": "CHECKIN#",
+      },
+    });
+    return items
+      .map((item) => CheckinEntitySchema.parse(item))
+      .map((e) => ({
+        checkinId: e.checkinId,
+        courtId: e.courtId,
+        userId: e.userId,
+        userName: e.userName,
+        status: e.status,
+        createdAt: e.createdAt,
+        photoUrl: e.photoUrl,
+      }));
+  },
+
   generateCheckinId(): string {
     return crypto.randomUUID();
   },
@@ -11,6 +42,7 @@ export const CheckinService = {
     tableName: string;
     courtId: string;
     userId: string;
+    userName: string;
     status: CourtStatus;
     photoUrl?: string;
   }): Promise<Checkin> {
@@ -29,6 +61,7 @@ export const CheckinService = {
       checkinId,
       courtId: params.courtId,
       userId: params.userId,
+      userName: params.userName,
       status: params.status,
       createdAt,
       photoUrl: params.photoUrl,
@@ -66,6 +99,7 @@ export const CheckinService = {
       checkinId,
       courtId: params.courtId,
       userId: params.userId,
+      userName: params.userName,
       status: params.status,
       createdAt,
       photoUrl: params.photoUrl,

@@ -49,10 +49,18 @@ export async function POST(
 
   const { id: courtId } = await ctx.params;
 
+  const userProfile = await UserService.getUserProfileByUserId({
+    tableName,
+    userId: userEmail.userId,
+  });
+  if (!userProfile)
+    return json(404, { ok: false, error: "User profile not found" });
+
   const checkin = await CheckinService.createCheckin({
     tableName,
     courtId,
     userId: userEmail.userId,
+    userName: userProfile.name,
     status: parsed.data.status,
     photoUrl: parsed.data.photoUrl,
   });
