@@ -87,6 +87,20 @@ export const swaggerSpec = {
             schema: { type: "string" },
             description: "Court ID",
           },
+          {
+            name: "lat",
+            in: "query",
+            required: true,
+            schema: { type: "number" },
+            description: "Current user latitude",
+          },
+          {
+            name: "long",
+            in: "query",
+            required: true,
+            schema: { type: "number" },
+            description: "Current user longitude",
+          },
         ],
         responses: {
           "200": {
@@ -170,6 +184,27 @@ export const swaggerSpec = {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ErrorResponse" },
                 example: { ok: false, error: "Invalid request" },
+              },
+            },
+          },
+          "404": {
+            description: "Court or user profile not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                example: { ok: false, error: "Court not found" },
+              },
+            },
+          },
+          "429": {
+            description: "Check-in cooldown active",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                example: {
+                  ok: false,
+                  error: "Check-in cooldown active for this court",
+                },
               },
             },
           },
@@ -725,6 +760,180 @@ export const swaggerSpec = {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ErrorResponse" },
                 example: { ok: false, error: "Stripe customer not found" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/stripe/{customId}/unsubscribe": {
+      post: {
+        summary: "Unsubscribe current user",
+        description:
+          "Cancels the authenticated user's latest Stripe subscription at period end for the provided Stripe customer ID.",
+        operationId: "unsubscribeCurrentUser",
+        tags: ["Stripe"],
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          {
+            name: "customId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "Stripe customer ID",
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Subscription updated to cancel at period end",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    ok: { type: "boolean", example: true },
+                    subscription: {
+                      type: "object",
+                      properties: {
+                        id: { type: "string" },
+                        status: { type: "string" },
+                        trialEnd: {
+                          type: "integer",
+                          nullable: true,
+                          description: "Unix timestamp",
+                        },
+                        currentPeriodEnd: {
+                          type: "integer",
+                          description: "Unix timestamp",
+                        },
+                        cancelAtPeriodEnd: { type: "boolean", example: true },
+                        customer: { type: "string" },
+                      },
+                      required: [
+                        "id",
+                        "status",
+                        "currentPeriodEnd",
+                        "cancelAtPeriodEnd",
+                        "customer",
+                      ],
+                    },
+                  },
+                  required: ["ok", "subscription"],
+                },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                example: { ok: false, error: "Unauthorized" },
+              },
+            },
+          },
+          "403": {
+            description: "Forbidden",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                example: { ok: false, error: "Forbidden" },
+              },
+            },
+          },
+          "404": {
+            description: "Stripe customer or subscription not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                example: { ok: false, error: "Subscription not found" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/stripe/{customId}/subscribe": {
+      post: {
+        summary: "Subscribe current user again",
+        description:
+          "Re-enables the authenticated user's latest Stripe subscription by removing scheduled cancellation for the provided Stripe customer ID.",
+        operationId: "subscribeCurrentUserAgain",
+        tags: ["Stripe"],
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          {
+            name: "customId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "Stripe customer ID",
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Subscription updated to continue",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    ok: { type: "boolean", example: true },
+                    subscription: {
+                      type: "object",
+                      properties: {
+                        id: { type: "string" },
+                        status: { type: "string" },
+                        trialEnd: {
+                          type: "integer",
+                          nullable: true,
+                          description: "Unix timestamp",
+                        },
+                        currentPeriodEnd: {
+                          type: "integer",
+                          description: "Unix timestamp",
+                        },
+                        cancelAtPeriodEnd: { type: "boolean", example: false },
+                        customer: { type: "string" },
+                      },
+                      required: [
+                        "id",
+                        "status",
+                        "currentPeriodEnd",
+                        "cancelAtPeriodEnd",
+                        "customer",
+                      ],
+                    },
+                  },
+                  required: ["ok", "subscription"],
+                },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                example: { ok: false, error: "Unauthorized" },
+              },
+            },
+          },
+          "403": {
+            description: "Forbidden",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                example: { ok: false, error: "Forbidden" },
+              },
+            },
+          },
+          "404": {
+            description: "Stripe customer or subscription not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                example: { ok: false, error: "Subscription not found" },
               },
             },
           },

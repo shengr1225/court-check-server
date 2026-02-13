@@ -116,4 +116,18 @@ export const CheckinService = {
       photoUrl: params.photoUrl,
     };
   },
+
+  async getLatestCheckinByUserAndCourt(params: {
+    tableName: string;
+    courtId: string;
+    userId: string;
+  }): Promise<Checkin | undefined> {
+    const checkins = await CheckinService.listCheckinsByCourtId({
+      tableName: params.tableName,
+      courtId: params.courtId,
+    });
+    return checkins
+      .filter((checkin) => checkin.userId === params.userId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  },
 };

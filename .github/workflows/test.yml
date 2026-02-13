@@ -29,3 +29,6 @@ jobs:
 
       - name: Run tests
         run: yarn test
+
+      - name: Run API integration tests
+        run: yarn test -- tests/api/all-apis.integration.test.ts

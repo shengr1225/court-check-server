@@ -32,6 +32,57 @@ describe("auth APIs", () => {
     expect(await response.json()).toEqual({ ok: false, error: "Unauthorized" });
   });
 
+  test("GET /api/auth/me returns user with stripeCustomerId", async () => {
+    const getUserEmailByEmail = jest
+      .fn()
+      .mockResolvedValue({ userId: "u1", email: "user@example.com" });
+    const getUserProfileByUserId = jest.fn().mockResolvedValue({
+      userId: "u1",
+      name: "User One",
+      checkinCount: 3,
+      stripeCustomerId: "cus_123",
+    });
+
+    jest.doMock("@/lib/env", () => ({
+      mustGetEnv: jest.fn((name: string) => {
+        if (name === "DYNAMODB_TABLE") return "table";
+        throw new Error(`Unexpected env var: ${name}`);
+      }),
+    }));
+    jest.doMock("@/lib/auth", () => ({
+      authCookie: { name: "auth-token", options: () => ({}) },
+      verifyAuthToken: jest
+        .fn()
+        .mockResolvedValue({ userId: "u1", email: "user@example.com" }),
+      createAuthToken: jest.fn(),
+    }));
+    jest.doMock("@/services/UserService", () => ({
+      UserService: {
+        getUserEmailByEmail,
+        getUserProfileByUserId,
+      },
+    }));
+
+    const { GET } = await import("@/app/api/auth/me/route");
+    const response = await GET({
+      cookies: {
+        get: () => ({ value: "jwt-token" }),
+      },
+    } as never);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      ok: true,
+      user: {
+        userId: "u1",
+        email: "user@example.com",
+        name: "User One",
+        checkinCount: 3,
+        stripeCustomerId: "cus_123",
+      },
+    });
+  });
+
   test("POST /api/auth/verify returns 400 on invalid email", async () => {
     jest.doMock("@/lib/env", () => ({
       mustGetEnv: jest.fn(() => "table"),

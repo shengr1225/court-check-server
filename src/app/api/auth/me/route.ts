@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
       email: userEmail.email,
       name: userProfile.name,
       checkinCount: userProfile.checkinCount,
+      stripeCustomerId: userProfile.stripeCustomerId,
     },
   });
 }

@@ -130,6 +130,192 @@ describe("stripe APIs", () => {
     });
   });
 
+  test("POST /api/stripe/[customId]/unsubscribe marks subscription to cancel at period end", async () => {
+    const getUserEmailByEmail = jest
+      .fn()
+      .mockResolvedValue({ userId: "u1", email: "user@example.com" });
+    const getUserProfileByUserId = jest.fn().mockResolvedValue({
+      userId: "u1",
+      name: "User One",
+      checkinCount: 3,
+      stripeCustomerId: "cus_123",
+    });
+    const stripeClient = {
+      customers: { create: jest.fn(), retrieve: jest.fn() },
+      customerSessions: { create: jest.fn() },
+      subscriptions: {
+        create: jest.fn(),
+        list: jest.fn().mockResolvedValue({
+          data: [
+            {
+              id: "sub_123",
+              items: { data: [{ current_period_end: 1735689600 }] },
+            },
+          ],
+        }),
+        update: jest.fn().mockResolvedValue({
+          id: "sub_123",
+          status: "active",
+          trial_end: null,
+          cancel_at_period_end: true,
+          items: { data: [{ current_period_end: 1735689600 }] },
+        }),
+      },
+      webhooks: { constructEvent: jest.fn() },
+    };
+
+    jest.doMock("stripe", () => ({
+      __esModule: true,
+      default: jest.fn(() => stripeClient),
+    }));
+    jest.doMock("@/lib/env", () => ({
+      mustGetEnv: jest.fn((name: string) => {
+        if (name === "STRIPE_SECRET_KEY") return "sk_test";
+        if (name === "DYNAMODB_TABLE") return "table";
+        throw new Error(`Unexpected env var: ${name}`);
+      }),
+    }));
+    jest.doMock("@/lib/auth", () => ({
+      authCookie: { name: "auth-token", options: () => ({}) },
+      verifyAuthToken: jest
+        .fn()
+        .mockResolvedValue({ userId: "u1", email: "user@example.com" }),
+    }));
+    jest.doMock("@/services/UserService", () => ({
+      UserService: {
+        getUserEmailByEmail,
+        getUserProfileByUserId,
+        setStripeCustomerId: jest.fn(),
+      },
+    }));
+
+    const { POST } = await import(
+      "@/app/api/stripe/[customId]/unsubscribe/route"
+    );
+    const response = await POST(
+      {
+        cookies: {
+          get: () => ({ value: "jwt-token" }),
+        },
+      } as never,
+      { params: Promise.resolve({ customId: "cus_123" }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      ok: true,
+      subscription: {
+        id: "sub_123",
+        status: "active",
+        trialEnd: null,
+        currentPeriodEnd: 1735689600,
+        cancelAtPeriodEnd: true,
+        customer: "cus_123",
+      },
+    });
+    expect(stripeClient.subscriptions.list).toHaveBeenCalledWith({
+      customer: "cus_123",
+      status: "all",
+      limit: 1,
+    });
+    expect(stripeClient.subscriptions.update).toHaveBeenCalledWith("sub_123", {
+      cancel_at_period_end: true,
+    });
+  });
+
+  test("POST /api/stripe/[customId]/subscribe removes cancel at period end", async () => {
+    const getUserEmailByEmail = jest
+      .fn()
+      .mockResolvedValue({ userId: "u1", email: "user@example.com" });
+    const getUserProfileByUserId = jest.fn().mockResolvedValue({
+      userId: "u1",
+      name: "User One",
+      checkinCount: 3,
+      stripeCustomerId: "cus_123",
+    });
+    const stripeClient = {
+      customers: { create: jest.fn(), retrieve: jest.fn() },
+      customerSessions: { create: jest.fn() },
+      subscriptions: {
+        create: jest.fn(),
+        list: jest.fn().mockResolvedValue({
+          data: [
+            {
+              id: "sub_123",
+              items: { data: [{ current_period_end: 1735689600 }] },
+            },
+          ],
+        }),
+        update: jest.fn().mockResolvedValue({
+          id: "sub_123",
+          status: "active",
+          trial_end: null,
+          cancel_at_period_end: false,
+          items: { data: [{ current_period_end: 1735689600 }] },
+        }),
+      },
+      webhooks: { constructEvent: jest.fn() },
+    };
+
+    jest.doMock("stripe", () => ({
+      __esModule: true,
+      default: jest.fn(() => stripeClient),
+    }));
+    jest.doMock("@/lib/env", () => ({
+      mustGetEnv: jest.fn((name: string) => {
+        if (name === "STRIPE_SECRET_KEY") return "sk_test";
+        if (name === "DYNAMODB_TABLE") return "table";
+        throw new Error(`Unexpected env var: ${name}`);
+      }),
+    }));
+    jest.doMock("@/lib/auth", () => ({
+      authCookie: { name: "auth-token", options: () => ({}) },
+      verifyAuthToken: jest
+        .fn()
+        .mockResolvedValue({ userId: "u1", email: "user@example.com" }),
+    }));
+    jest.doMock("@/services/UserService", () => ({
+      UserService: {
+        getUserEmailByEmail,
+        getUserProfileByUserId,
+        setStripeCustomerId: jest.fn(),
+      },
+    }));
+
+    const { POST } = await import(
+      "@/app/api/stripe/[customId]/subscribe/route"
+    );
+    const response = await POST(
+      {
+        cookies: {
+          get: () => ({ value: "jwt-token" }),
+        },
+      } as never,
+      { params: Promise.resolve({ customId: "cus_123" }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      ok: true,
+      subscription: {
+        id: "sub_123",
+        status: "active",
+        trialEnd: null,
+        currentPeriodEnd: 1735689600,
+        cancelAtPeriodEnd: false,
+        customer: "cus_123",
+      },
+    });
+    expect(stripeClient.subscriptions.list).toHaveBeenCalledWith({
+      customer: "cus_123",
+      status: "all",
+      limit: 1,
+    });
+    expect(stripeClient.subscriptions.update).toHaveBeenCalledWith("sub_123", {
+      cancel_at_period_end: false,
+    });
+  });
+
   test("POST /api/stripe/webhook sends email on successful invoice payment", async () => {
     const send = jest.fn().mockResolvedValue(undefined);
     const stripeClient = {
