@@ -1,4 +1,8 @@
 describe("courts API", () => {
+  type CourtResponseItem = {
+    distanceMiles?: number;
+  };
+
   beforeEach(() => {
     jest.resetModules();
     jest.clearAllMocks();
@@ -46,8 +50,10 @@ describe("courts API", () => {
     ]);
     const listCheckinsByCourtId = jest
       .fn()
-      .mockImplementation(({ courtId }: { courtId: string }) =>
-        Promise.resolve([{ checkinId: `ck-${courtId}`, courtId }])
+      .mockImplementation((params) =>
+        Promise.resolve([
+          { checkinId: `ck-${params.courtId}`, courtId: params.courtId },
+        ])
       );
 
     jest.doMock("@/lib/env", () => ({
@@ -80,7 +86,7 @@ describe("courts API", () => {
     expect(listCheckinsByCourtId).toHaveBeenCalledTimes(2);
   });
 
-  test("GET /api/courts only keeps distanceMiles on top 10 straight-line results", async () => {
+  test("GET /api/courts keeps distanceMiles on all courts when top K covers all", async () => {
     const courts = Array.from({ length: 12 }, (_, i) => ({
       id: `court-${i + 1}`,
       name: `Court ${i + 1}`,
@@ -113,12 +119,11 @@ describe("courts API", () => {
 
     expect(response.status).toBe(200);
     expect(fetchMock).not.toHaveBeenCalled();
-    const body = await response.json();
+    const body = (await response.json()) as { courts: CourtResponseItem[] };
     const withDistance = body.courts.filter(
-      (court: { distanceMiles?: number }) =>
-        typeof court.distanceMiles === "number"
+      (court) => typeof court.distanceMiles === "number"
     );
-    expect(withDistance).toHaveLength(10);
+    expect(withDistance).toHaveLength(12);
     expect(listCheckinsByCourtId).toHaveBeenCalledTimes(12);
   });
 });
