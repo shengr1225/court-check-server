@@ -92,6 +92,17 @@ export const CheckinService = {
             ConditionExpression: "attribute_exists(pk)",
           },
         },
+        {
+          Update: {
+            TableName: params.tableName,
+            Key: { pk: `USER#${params.userId}`, sk: "PROFILE" },
+            UpdateExpression: "ADD checkinCount :one",
+            ExpressionAttributeValues: {
+              ":one": 1,
+            },
+            ConditionExpression: "attribute_exists(pk)",
+          },
+        },
       ],
     });
 

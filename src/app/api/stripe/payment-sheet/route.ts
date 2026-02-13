@@ -19,13 +19,7 @@ export async function POST(request: NextRequest) {
 
   const tableName = mustGetEnv("DYNAMODB_TABLE");
 
-  const amountCents = Number(mustGetEnv("STRIPE_AMOUNT_CENTS"));
-  if (!Number.isInteger(amountCents) || amountCents <= 0) {
-    return json(500, {
-      ok: false,
-      error: "Bad server config: STRIPE_AMOUNT_CENTS",
-    });
-  }
+  const monthlyPriceId = mustGetEnv("STRIPE_MONTHLY_PRICE_ID");
 
   const userEmail = await UserService.getUserEmailByEmail({
     tableName,
@@ -70,20 +64,38 @@ export async function POST(request: NextRequest) {
     },
   });
 
-  const paymentIntent = await stripe.paymentIntents.create({
-    amount: amountCents,
-    currency: "usd",
+  const subscription = await stripe.subscriptions.create({
     customer: stripeCustomerId,
+    items: [{ price: monthlyPriceId }],
+    trial_period_days: 7,
+    payment_settings: {
+      save_default_payment_method: "on_subscription",
+    },
+    expand: ["pending_setup_intent"],
     metadata: {
       userId: userEmail.userId,
       email: userEmail.email,
     },
-    automatic_payment_methods: { enabled: true },
   });
+
+  const pendingSetupIntent = subscription.pending_setup_intent;
+  let pendingSetupIntentClientSecret: string | null = null;
+  if (pendingSetupIntent) {
+    if (typeof pendingSetupIntent === "string") {
+      return json(500, {
+        ok: false,
+        error: "Failed to expand pending setup intent",
+      });
+    }
+    pendingSetupIntentClientSecret = pendingSetupIntent.client_secret;
+  }
 
   return json(200, {
     ok: true,
-    paymentIntent: paymentIntent.client_secret,
+    subscriptionId: subscription.id,
+    subscriptionStatus: subscription.status,
+    setupIntentClientSecret: pendingSetupIntentClientSecret,
+    pendingSetupIntentClientSecret,
     customerSessionClientSecret: customerSession.client_secret,
     customer: stripeCustomerId,
     publishableKey: mustGetEnv("STRIPE_PUBLIC_KEY"),

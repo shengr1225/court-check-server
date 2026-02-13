@@ -57,6 +57,7 @@ export const UserService = {
       sk: "PROFILE",
       userId: params.userId,
       name: params.name,
+      checkinCount: 0,
     };
 
     await ddbTransactWrite({

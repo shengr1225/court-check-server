@@ -11,6 +11,8 @@ const CourtFieldsSchema = z.object({
   id: z.string(),
   name: z.string(),
   addressLine: z.string(),
+  lat: z.number().optional(),
+  long: z.number().optional(),
   courtCount: z.number().int().positive().optional(),
   status: CourtStatusSchema,
   lastUpdatedAt: z.string().datetime(),
@@ -57,6 +59,7 @@ export const UserProfileSchema = SingleTableItemSchema.extend({
   SK: z.literal("PROFILE"),
   userId: z.string(),
   name: z.string(),
+  checkinCount: z.number().int().nonnegative().optional(),
   stripeCustomerId: z.string().optional(),
 });
 

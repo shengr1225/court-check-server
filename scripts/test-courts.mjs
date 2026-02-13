@@ -126,7 +126,21 @@ async function run() {
     process.exit(1);
   }
 
-  // 5) POST /api/courts/[id]/checkin
+  // 5) GET /api/auth/me (before checkin)
+  const meRes1 = await fetch(
+    `${BASE_URL}/api/auth/me`,
+    fetchOptions({ headers: cookies() })
+  );
+  const meBody1 = await meRes1.json();
+  log("5) GET /api/auth/me (before checkin)", meRes1, meBody1);
+
+  if (!meBody1.ok) {
+    console.log("\nFailed to get current user before checkin.");
+    process.exit(1);
+  }
+  const beforeCount = Number(meBody1.user?.checkinCount || 0);
+
+  // 6) POST /api/courts/[id]/checkin
   const checkinRes = await fetch(
     `${BASE_URL}/api/courts/${courtId}/checkin`,
     fetchOptions({
@@ -136,20 +150,40 @@ async function run() {
     })
   );
   const checkinBody = await checkinRes.json();
-  log("5) POST /api/courts/[id]/checkin", checkinRes, checkinBody);
+  log("6) POST /api/courts/[id]/checkin", checkinRes, checkinBody);
 
   if (!checkinBody.ok) {
     console.log("\nCheckin failed.");
     process.exit(1);
   }
 
-  // 6) GET /api/courts/[id] (after checkin)
+  // 7) GET /api/auth/me (after checkin)
+  const meRes2 = await fetch(
+    `${BASE_URL}/api/auth/me`,
+    fetchOptions({ headers: cookies() })
+  );
+  const meBody2 = await meRes2.json();
+  log("7) GET /api/auth/me (after checkin)", meRes2, meBody2);
+
+  if (!meBody2.ok) {
+    console.log("\nFailed to get current user after checkin.");
+    process.exit(1);
+  }
+  const afterCount = Number(meBody2.user?.checkinCount || 0);
+  if (afterCount !== beforeCount + 1) {
+    console.log(
+      `\ncheckinCount assertion failed. before=${beforeCount}, after=${afterCount}`
+    );
+    process.exit(1);
+  }
+
+  // 8) GET /api/courts/[id] (after checkin)
   const getRes2 = await fetch(
     `${BASE_URL}/api/courts/${courtId}`,
     fetchOptions({ headers: cookies() })
   );
   const getBody2 = await getRes2.json();
-  log("6) GET /api/courts/[id] (after checkin)", getRes2, getBody2);
+  log("8) GET /api/courts/[id] (after checkin)", getRes2, getBody2);
 
   console.log("\nAll tests completed.");
 }

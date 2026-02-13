@@ -81,6 +81,8 @@ export async function POST(req: Request) {
           userId: userEmail.userId,
           email: userEmail.email,
           name: userProfile.name,
+          checkinCount: userProfile.checkinCount,
+          stripeCustomerId: userProfile.stripeCustomerId,
         },
       },
       { status: 200 }
@@ -112,6 +114,7 @@ export async function POST(req: Request) {
           userId,
           email,
           name: userProfile.name,
+          checkinCount: userProfile.checkinCount,
         },
       },
       { status: 200 }
@@ -154,6 +157,7 @@ export async function POST(req: Request) {
                 userId: existingUserEmail.userId,
                 email: existingUserEmail.email,
                 name: existingUserProfile.name,
+                checkinCount: existingUserProfile.checkinCount,
               },
             },
             { status: 200 }

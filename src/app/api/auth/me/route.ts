@@ -35,6 +35,7 @@ export async function GET(request: NextRequest) {
       userId: userEmail.userId,
       email: userEmail.email,
       name: userProfile.name,
+      checkinCount: userProfile.checkinCount,
     },
   });
 }
@@ -81,6 +82,7 @@ export async function PATCH(request: NextRequest) {
       userId: userEmail.userId,
       email: userEmail.email,
       name: updatedProfile.name,
+      checkinCount: updatedProfile.checkinCount,
     },
   });
 }

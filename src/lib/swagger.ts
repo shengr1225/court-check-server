@@ -3,7 +3,8 @@ export const swaggerSpec = {
   info: {
     title: "Court Check Server API",
     version: "1.0.0",
-    description: "API for email OTP authentication and user management",
+    description:
+      "API for email OTP authentication, court/checkin management, and Stripe payments",
   },
   servers: [
     {
@@ -20,9 +21,27 @@ export const swaggerSpec = {
       get: {
         summary: "List courts",
         description:
-          "Returns a list of pickleball courts with status, last updated timestamp, and a photo URL.",
+          "Returns a list of pickleball courts with status, last updated timestamp, photo URL, and associated checkins.",
         operationId: "listCourts",
         tags: ["Courts"],
+        parameters: [
+          {
+            name: "lat",
+            in: "query",
+            required: false,
+            schema: { type: "number", format: "double" },
+            description:
+              "Optional latitude. Must be used with long. When provided, courts are sorted by nearest distance from this coordinate.",
+          },
+          {
+            name: "long",
+            in: "query",
+            required: false,
+            schema: { type: "number", format: "double" },
+            description:
+              "Optional longitude. Must be used with lat. When provided, courts are sorted by nearest distance from this coordinate.",
+          },
+        ],
         responses: {
           "200": {
             description: "Courts list",
@@ -34,11 +53,63 @@ export const swaggerSpec = {
                     ok: { type: "boolean", example: true },
                     courts: {
                       type: "array",
-                      items: { $ref: "#/components/schemas/Court" },
+                      items: { $ref: "#/components/schemas/CourtWithCheckins" },
                     },
                   },
                   required: ["ok", "courts"],
                 },
+              },
+            },
+          },
+          "400": {
+            description: "Invalid query params",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                example: { ok: false, error: "Invalid lat/long query params" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/courts/{id}": {
+      get: {
+        summary: "Get court by ID",
+        description: "Returns a single court with its checkins by court ID.",
+        operationId: "getCourtById",
+        tags: ["Courts"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "Court ID",
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Court with checkins",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    ok: { type: "boolean", example: true },
+                    court: { $ref: "#/components/schemas/CourtWithCheckins" },
+                  },
+                  required: ["ok", "court"],
+                },
+              },
+            },
+          },
+          "404": {
+            description: "Court not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                example: { ok: false, error: "Court not found" },
               },
             },
           },
@@ -434,6 +505,232 @@ export const swaggerSpec = {
         },
       },
     },
+    "/api/stripe/payment-sheet": {
+      post: {
+        summary: "Create payment sheet",
+        description:
+          "Creates a Stripe monthly subscription with a 7-day free trial for the authenticated user. Returns setup intent client secret, customer session client secret, customer id, and publishable key for client-side Stripe integration.",
+        operationId: "createPaymentSheet",
+        tags: ["Stripe"],
+        security: [{ cookieAuth: [] }],
+        responses: {
+          "200": {
+            description: "Payment sheet data",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    ok: { type: "boolean", example: true },
+                    subscriptionId: {
+                      type: "string",
+                      description: "Stripe subscription ID",
+                    },
+                    subscriptionStatus: {
+                      type: "string",
+                      description: "Stripe subscription status",
+                    },
+                    setupIntentClientSecret: {
+                      type: "string",
+                      nullable: true,
+                      description: "SetupIntent client secret for PaymentSheet",
+                    },
+                    pendingSetupIntentClientSecret: {
+                      type: "string",
+                      nullable: true,
+                      description:
+                        "Alias of setup intent client secret for compatibility",
+                    },
+                    customerSessionClientSecret: {
+                      type: "string",
+                      description: "Customer session client secret",
+                    },
+                    customer: {
+                      type: "string",
+                      description: "Stripe customer ID",
+                    },
+                    publishableKey: {
+                      type: "string",
+                      description: "Stripe publishable key for client",
+                    },
+                  },
+                  required: [
+                    "ok",
+                    "subscriptionId",
+                    "subscriptionStatus",
+                    "setupIntentClientSecret",
+                    "customerSessionClientSecret",
+                    "customer",
+                    "publishableKey",
+                  ],
+                },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                example: { ok: false, error: "Unauthorized" },
+              },
+            },
+          },
+          "500": {
+            description: "Server configuration error",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                example: {
+                  ok: false,
+                  error: "Bad server config: STRIPE_MONTHLY_PRICE_ID",
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/stripe/webhook": {
+      post: {
+        summary: "Stripe webhook",
+        description:
+          "Stripe webhook endpoint for subscription lifecycle events. Called by Stripe servers, not by clients. Requires stripe-signature header for verification. Handles invoice.payment_succeeded, invoice.payment_failed, customer.subscription.updated, and customer.subscription.deleted.",
+        operationId: "stripeWebhook",
+        tags: ["Stripe"],
+        parameters: [
+          {
+            name: "stripe-signature",
+            in: "header",
+            required: true,
+            schema: { type: "string" },
+            description: "Stripe webhook signature for verification",
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { type: "object", description: "Stripe event payload" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Webhook received",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    ok: { type: "boolean", example: true },
+                    received: { type: "boolean", example: true },
+                  },
+                  required: ["ok", "received"],
+                },
+              },
+            },
+          },
+          "400": {
+            description: "Invalid signature",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                example: { ok: false, error: "Invalid signature" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/stripe/{customId}": {
+      get: {
+        summary: "Get current user's subscription",
+        description:
+          "Returns the authenticated user's latest Stripe subscription for the provided Stripe customer ID.",
+        operationId: "getCurrentUserSubscription",
+        tags: ["Stripe"],
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          {
+            name: "customId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "Stripe customer ID",
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Subscription details",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    ok: { type: "boolean", example: true },
+                    subscription: {
+                      type: "object",
+                      nullable: true,
+                      properties: {
+                        id: { type: "string" },
+                        status: { type: "string" },
+                        trialEnd: {
+                          type: "integer",
+                          nullable: true,
+                          description: "Unix timestamp",
+                        },
+                        currentPeriodEnd: {
+                          type: "integer",
+                          description: "Unix timestamp",
+                        },
+                        cancelAtPeriodEnd: { type: "boolean" },
+                        customer: { type: "string" },
+                      },
+                      required: [
+                        "id",
+                        "status",
+                        "currentPeriodEnd",
+                        "cancelAtPeriodEnd",
+                        "customer",
+                      ],
+                    },
+                  },
+                  required: ["ok", "subscription"],
+                },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                example: { ok: false, error: "Unauthorized" },
+              },
+            },
+          },
+          "403": {
+            description: "Forbidden",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                example: { ok: false, error: "Forbidden" },
+              },
+            },
+          },
+          "404": {
+            description: "Stripe customer not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+                example: { ok: false, error: "Stripe customer not found" },
+              },
+            },
+          },
+        },
+      },
+    },
     "/api/auth/logout": {
       post: {
         summary: "Logout",
@@ -473,6 +770,18 @@ export const swaggerSpec = {
           id: { type: "string", description: "Court identifier" },
           name: { type: "string", description: "Court name" },
           addressLine: { type: "string", description: "Court address line" },
+          lat: {
+            type: "number",
+            format: "double",
+            description: "Latitude coordinate",
+            example: 36.1699,
+          },
+          long: {
+            type: "number",
+            format: "double",
+            description: "Longitude coordinate",
+            example: -115.1398,
+          },
           courtCount: {
             type: "integer",
             description: "Number of courts at this location",
@@ -489,6 +798,12 @@ export const swaggerSpec = {
             format: "uri",
             description: "URL to a court photo",
           },
+          distanceMiles: {
+            type: "number",
+            description:
+              "Distance in miles from query lat/long. Present on list endpoint when lat and long query params are provided.",
+            example: 1.15,
+          },
         },
         required: [
           "id",
@@ -497,6 +812,22 @@ export const swaggerSpec = {
           "status",
           "lastUpdatedAt",
           "photoUrl",
+        ],
+      },
+      CourtWithCheckins: {
+        allOf: [
+          { $ref: "#/components/schemas/Court" },
+          {
+            type: "object",
+            properties: {
+              checkins: {
+                type: "array",
+                items: { $ref: "#/components/schemas/Checkin" },
+                description: "Checkins for this court",
+              },
+            },
+            required: ["checkins"],
+          },
         ],
       },
       CourtStatus: {
@@ -509,6 +840,10 @@ export const swaggerSpec = {
           checkinId: { type: "string", description: "Check-in identifier" },
           courtId: { type: "string", description: "Court ID" },
           userId: { type: "string", description: "User ID" },
+          userName: {
+            type: "string",
+            description: "User name at check-in time",
+          },
           status: { $ref: "#/components/schemas/CourtStatus" },
           createdAt: { type: "string", format: "date-time" },
           photoUrl: { type: "string", format: "uri" },
@@ -534,6 +869,11 @@ export const swaggerSpec = {
             type: "string",
             description: "User's name",
             example: "John Doe",
+          },
+          checkinCount: {
+            type: "integer",
+            description: "Monthly check-in count",
+            example: 3,
           },
         },
         required: ["userId", "email", "name"],
