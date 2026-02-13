@@ -4,6 +4,8 @@ import type { Court } from "@/lib/schemas";
 import { CheckinService } from "@/services/CheckinService";
 import { CourtService } from "@/services/CourtService";
 
+const DISTANCE_TOP_K = 50;
+
 function json(status: number, body: unknown) {
   return NextResponse.json(body, { status });
 }
@@ -15,16 +17,53 @@ function parseCoordinate(value: string | null): number | undefined {
   return num;
 }
 
-function toChunkedDestinations(courts: Court[], size: number): Court[][] {
-  const chunks: Court[][] = [];
-  for (let i = 0; i < courts.length; i += size) {
-    chunks.push(courts.slice(i, i + size));
-  }
-  return chunks;
+function toRadians(value: number): number {
+  return (value * Math.PI) / 180;
 }
 
-function metersToMiles(distanceMeters: number): number {
-  return distanceMeters / 1609.344;
+function getHaversineDistanceMiles(params: {
+  originLat: number;
+  originLong: number;
+  destinationLat: number;
+  destinationLong: number;
+}): number {
+  const earthRadiusMiles = 3958.8;
+  const dLat = toRadians(params.destinationLat - params.originLat);
+  const dLong = toRadians(params.destinationLong - params.originLong);
+  const originLatRad = toRadians(params.originLat);
+  const destinationLatRad = toRadians(params.destinationLat);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(originLatRad) *
+      Math.cos(destinationLatRad) *
+      Math.sin(dLong / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return earthRadiusMiles * c;
+}
+
+function selectTopKByAirDistance(params: {
+  originLat: number;
+  originLong: number;
+  courts: Court[];
+  topK: number;
+}): Court[] {
+  return params.courts
+    .filter(
+      (court): court is Court & { lat: number; long: number } =>
+        typeof court.lat === "number" && typeof court.long === "number"
+    )
+    .map((court) => ({
+      court,
+      distanceMiles: getHaversineDistanceMiles({
+        originLat: params.originLat,
+        originLong: params.originLong,
+        destinationLat: court.lat,
+        destinationLong: court.long,
+      }),
+    }))
+    .sort((a, b) => a.distanceMiles - b.distanceMiles)
+    .slice(0, params.topK)
+    .map((item) => item.court);
 }
 
 async function getDistanceByCourtId(params: {
@@ -32,48 +71,21 @@ async function getDistanceByCourtId(params: {
   originLong: number;
   courts: Court[];
 }): Promise<Map<string, number>> {
-  const googleApiKey = mustGetEnv("GOOGLE_API_KEY");
   const distanceMilesByCourtId = new Map<string, number>();
-  const courtsWithCoordinates = params.courts.filter(
-    (court) => typeof court.lat === "number" && typeof court.long === "number"
-  );
-
-  const destinationChunks = toChunkedDestinations(courtsWithCoordinates, 25);
-  for (const chunk of destinationChunks) {
-    const url = new URL(
-      "https://maps.googleapis.com/maps/api/distancematrix/json"
-    );
-    url.searchParams.set("origins", `${params.originLat},${params.originLong}`);
-    url.searchParams.set(
-      "destinations",
-      chunk.map((court) => `${court.lat},${court.long}`).join("|")
-    );
-    url.searchParams.set("key", googleApiKey);
-
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(
-        `Google Distance Matrix request failed: ${response.status}`
-      );
-    }
-    const payload = await response.json();
-    if (payload.status !== "OK") {
-      throw new Error(`Google Distance Matrix returned ${payload.status}`);
-    }
-
-    const elements = payload.rows?.[0]?.elements;
-    if (!Array.isArray(elements) || elements.length !== chunk.length) {
-      throw new Error("Google Distance Matrix response shape mismatch");
-    }
-
-    chunk.forEach((court, index) => {
-      const element = elements[index];
-      const distanceMeters = element?.distance?.value;
-      if (element?.status === "OK" && typeof distanceMeters === "number") {
-        distanceMilesByCourtId.set(court.id, metersToMiles(distanceMeters));
-      }
+  params.courts
+    .filter(
+      (court): court is Court & { lat: number; long: number } =>
+        typeof court.lat === "number" && typeof court.long === "number"
+    )
+    .forEach((court) => {
+      const distanceMiles = getHaversineDistanceMiles({
+        originLat: params.originLat,
+        originLong: params.originLong,
+        destinationLat: court.lat,
+        destinationLong: court.long,
+      });
+      distanceMilesByCourtId.set(court.id, distanceMiles);
     });
-  }
 
   return distanceMilesByCourtId;
 }
@@ -114,10 +126,16 @@ export async function GET(request: Request) {
   let distanceMilesByCourtId = new Map<string, number>();
 
   if (originLat !== undefined && originLong !== undefined) {
-    distanceMilesByCourtId = await getDistanceByCourtId({
+    const topCourts = selectTopKByAirDistance({
       originLat,
       originLong,
       courts,
+      topK: DISTANCE_TOP_K,
+    });
+    distanceMilesByCourtId = await getDistanceByCourtId({
+      originLat,
+      originLong,
+      courts: topCourts,
     });
     sortedCourts = [...courts].sort((a, b) => {
       const aDistance =

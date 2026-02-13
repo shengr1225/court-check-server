@@ -49,26 +49,10 @@ describe("courts API", () => {
       .mockImplementation(({ courtId }: { courtId: string }) =>
         Promise.resolve([{ checkinId: `ck-${courtId}`, courtId }])
       );
-    const fetchMock = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        status: "OK",
-        rows: [
-          {
-            elements: [
-              { status: "OK", distance: { value: 3218 } },
-              { status: "OK", distance: { value: 1609 } },
-            ],
-          },
-        ],
-      }),
-    });
-    (global as { fetch: typeof fetch }).fetch = fetchMock as typeof fetch;
 
     jest.doMock("@/lib/env", () => ({
       mustGetEnv: jest.fn((name: string) => {
         if (name === "DYNAMODB_TABLE") return "table";
-        if (name === "GOOGLE_API_KEY") return "google-key";
         throw new Error(`Unexpected env var: ${name}`);
       }),
     }));
@@ -88,11 +72,53 @@ describe("courts API", () => {
     const body = await response.json();
     expect(body.ok).toBe(true);
     expect(body.courts).toHaveLength(2);
-    expect(body.courts[0].id).toBe("court-2");
-    expect(body.courts[1].id).toBe("court-1");
-    expect(body.courts[0].distanceMiles).toBeCloseTo(1, 3);
-    expect(body.courts[1].distanceMiles).toBeCloseTo(2, 3);
+    expect(body.courts[0].id).toBe("court-1");
+    expect(body.courts[1].id).toBe("court-2");
+    expect(body.courts[0].distanceMiles).toBeLessThan(
+      body.courts[1].distanceMiles
+    );
     expect(listCheckinsByCourtId).toHaveBeenCalledTimes(2);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("GET /api/courts only keeps distanceMiles on top 10 straight-line results", async () => {
+    const courts = Array.from({ length: 12 }, (_, i) => ({
+      id: `court-${i + 1}`,
+      name: `Court ${i + 1}`,
+      addressLine: `Addr ${i + 1}`,
+      lat: 37 + i * 0.01,
+      long: -122 - i * 0.01,
+    }));
+    const listCourts = jest.fn().mockResolvedValue(courts);
+    const listCheckinsByCourtId = jest.fn().mockResolvedValue([]);
+    const fetchMock = jest.fn();
+    (global as { fetch: typeof fetch }).fetch = fetchMock as typeof fetch;
+
+    jest.doMock("@/lib/env", () => ({
+      mustGetEnv: jest.fn((name: string) => {
+        if (name === "DYNAMODB_TABLE") return "table";
+        throw new Error(`Unexpected env var: ${name}`);
+      }),
+    }));
+    jest.doMock("@/services/CourtService", () => ({
+      CourtService: { listCourts },
+    }));
+    jest.doMock("@/services/CheckinService", () => ({
+      CheckinService: { listCheckinsByCourtId },
+    }));
+
+    const { GET } = await import("@/app/api/courts/route");
+    const response = await GET(
+      new Request("http://localhost/api/courts?lat=37&long=-122")
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).not.toHaveBeenCalled();
+    const body = await response.json();
+    const withDistance = body.courts.filter(
+      (court: { distanceMiles?: number }) =>
+        typeof court.distanceMiles === "number"
+    );
+    expect(withDistance).toHaveLength(10);
+    expect(listCheckinsByCourtId).toHaveBeenCalledTimes(12);
   });
 });
